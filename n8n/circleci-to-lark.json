@@ -1,0 +1,50 @@
+{
+  "name": "CircleCI → Lark",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "circleci",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "CircleCI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "circleci-lark-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nconst p = b.pipeline || {};\nconst tp = p.trigger_parameters || {};\nconst git = tp.git || {};\nconst gl = tp.gitlab || {};\nconst wf = b.workflow || {};\nconst job = b.job || {};\n\nconst isJob = b.type === 'job-completed';\nconst status = (isJob ? job.status : wf.status) || 'unknown';\nconst name = isJob ? `job ${job.name}` : `workflow ${wf.name}`;\nconst url = (isJob ? job.url : wf.url) || p.url || '';\n\nconst colors = { success: 'green', failed: 'red', error: 'red', canceled: 'grey', unauthorized: 'orange', on_hold: 'orange' };\nconst icons = { success: '✅', failed: '❌', error: '❌', canceled: '⚪', unauthorized: '🔒', on_hold: '⏸️' };\n\nconst project = (b.project && b.project.name) || gl.repo_name || 'Project';\nconst ref = git.tag ? `tag \\`${git.tag}\\`` : `branch \\`${git.branch || gl.branch || '-'}\\``;\nconst sha = (git.checkout_sha || gl.commit_sha || '').slice(0, 8);\nconst author = gl.commit_author_name || gl.user_name || '-';\nconst title = gl.commit_title || '';\n\nconst start = new Date(wf.created_at || job.started_at || 0);\nconst stop = new Date(wf.stopped_at || job.stopped_at || b.happened_at || 0);\nconst secs = Math.max(0, Math.round((stop - start) / 1000));\nconst dur = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;\n\nconst content = [\n  `**Project:** ${project}`,\n  `**Ref:** ${ref}  (${sha})`,\n  `**Pipeline:** #${p.number ?? '-'}`,\n  `**Duration:** ${dur}`,\n  `**Author:** ${author}`,\n  title ? `**Commit:** ${title}` : null,\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    msg_type: 'interactive',\n    card: {\n      config: { wide_screen_mode: true },\n      header: {\n        template: colors[status] || 'blue',\n        title: { tag: 'plain_text', content: `${icons[status] || 'ℹ️'} ${project} — ${name} ${status}` },\n      },\n      elements: [\n        { tag: 'div', text: { tag: 'lark_md', content } },\n        { tag: 'action', actions: [\n          { tag: 'button', type: status === 'success' ? 'default' : 'danger', text: { tag: 'plain_text', content: 'Open in CircleCI' }, url },\n        ] },\n      ],\n    },\n  },\n}];"
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Build Lark Card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.larksuite.com/open-apis/bot/v2/hook/REPLACE_WITH_YOUR_LARK_BOT_TOKEN",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Send to Lark",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0]
+    }
+  ],
+  "connections": {
+    "CircleCI Webhook": { "main": [[{ "node": "Build Lark Card", "type": "main", "index": 0 }]] },
+    "Build Lark Card": { "main": [[{ "node": "Send to Lark", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}
